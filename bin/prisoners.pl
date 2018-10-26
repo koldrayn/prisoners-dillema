@@ -41,17 +41,11 @@ sub main {
 }
 
 sub action_start {
-
-    # make sure dbh is initialized
-    my $done = eval { Prisoners::Object->dbh_instance( $_DSN, $_DB_USER, $_DB_PASSWD ); };
-    if ( !$done || $EVAL_ERROR ) {
-        croak sprintf "Failed to initialize dbh: %s", $EVAL_ERROR // '<unknown error>';
-    }
+    _init();
 
     my $session = Prisoners::Session->new();
 
     my $player_name = shift @ARGV // '';
-
     $session->add_player($player_name);
 
     return;
@@ -63,7 +57,28 @@ sub action_join {
     if ( !$session_id ) {
         croak "session_is is required!";
     }
-    return
+
+    _init();
+
+    my $session = Prisoners::Session->new( {
+            id => $session_id,
+        }
+    );
+
+    my $player_name = shift @ARGV // '';
+    $session->join_player($player_name);
+
+    return;
+}
+
+sub _init {
+    # make sure dbh is initialized
+    my $done = eval { Prisoners::Object->dbh_instance( $_DSN, $_DB_USER, $_DB_PASSWD ); };
+    if ( !$done || $EVAL_ERROR ) {
+        croak sprintf "Failed to initialize dbh: %s", $EVAL_ERROR // '<unknown error>';
+    }
+
+    return;
 }
 
 sub print_usage {

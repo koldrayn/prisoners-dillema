@@ -64,20 +64,25 @@ sub _db_do {
     );
 }
 
-# sub _db_fetchall_arrayref {
-#     my ($self, $query_name, $params) = @_;
-#
-#     my $queries = $self->_queries();
-#
-#     if (!$query_name || !exists $queries->{$query_name}) {
-#         croak sprintf "Unknown query '%s' for '%s'", $query_name // '<unknown>', ref $self;
-#     }
-#
-#     my $sth = $self->dbh_instance()->prepare($queries->{$query_name});
-#     $sth->execute($params);
-#
-#     return $sth->fetchall_arrayref();
-# }
+sub _db_fetchall {
+    my ( $self, $query_name, $params ) = @_;
+
+    my $queries = $self->_queries();
+
+    if ( !$query_name || !exists $queries->{$query_name} ) {
+        croak sprintf "Unknown query '%s' for '%s'", $query_name // '<unknown>', ref $self;
+    }
+
+    my $sth = $self->dbh_instance()->prepare( $queries->{$query_name} );
+    $sth->execute( @{ $params // [] } );
+
+    my @result;
+    while ( my $data = $sth->fetchrow_hashref() ) {
+        push @result, $data;
+    }
+
+    return \@result;
+}
 
 # place for common queries (in case there would be any)
 sub _queries {
