@@ -22,6 +22,8 @@ const my $_DSN       => 'DBI:mysql:database=prisoners;host=localhost;port=3306';
 const my $_DB_USER   => 'koldrayn';
 const my $_DB_PASSWD => 'qwerty';
 
+const my $_RECHECK_INTERVAL => 5;
+
 sub main {
     if ( !scalar @ARGV ) {
         print_usage('Nothing to do...');
@@ -46,9 +48,9 @@ sub action_start {
     my $session = Prisoners::Session->new();
 
     my $player_name = shift @ARGV // '';
-    $session->add_player($player_name);
+    my $player = $session->add_player($player_name);
 
-    return;
+    return do_interrogation( $session, $player );
 }
 
 sub action_join {
@@ -66,7 +68,23 @@ sub action_join {
     );
 
     my $player_name = shift @ARGV // '';
-    $session->join_player($player_name);
+    my $player = $session->join_player($player_name);
+
+    return do_interrogation( $session, $player );
+}
+
+sub do_interrogation {
+    my ( $session, $local_player ) = @_;
+
+    $local_player->make_decision();
+
+    while ( !$session->players_ready() ) {
+        $session->log("Still waiting for the rest of the players\n");
+        sleep $_RECHECK_INTERVAL;
+    }
+
+    $session->finish();
+    Prisoners::Session->cleanup();
 
     return;
 }

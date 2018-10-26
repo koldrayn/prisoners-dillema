@@ -5,6 +5,7 @@ use warnings;
 
 use Carp qw(croak);
 use Const::Fast;
+use List::Util qw(none);
 
 use Prisoners::Player;
 
@@ -31,6 +32,12 @@ has 'originated' => (
     is      => 'ro',
     isa     => 'Bool',
     default => 1,
+);
+
+has 'finished' => (
+    is      => 'rw',
+    isa     => 'Bool',
+    default => 0,
 );
 
 around BUILDARGS => sub {
@@ -70,8 +77,8 @@ sub BUILD {
     }
     else {
         $self->log( "Session with id=%s is found. Checking players...\n", $self->id() );
-        # find all external players of the session
-        $self->reload_players();
+        # find all external players of the session, log whatever you find (verbose=1)
+        $self->reload_players(1);
 
         if ( !scalar @{ $self->players() } ) {
             croak "Session without players\n";
@@ -94,7 +101,7 @@ sub add_player {
     $self->log( "Player %s was added to session %s\n", $player->name(), $self->id() );
 
     push @{ $self->players() }, $player;
-    return;
+    return $player;
 }
 
 sub join_player {
@@ -114,18 +121,87 @@ sub join_player {
     $self->log( "Player %s joined to session %s\n", $player->name(), $self->id() );
 
     push @{ $self->players() }, $player;
-    return;
+    return $player;
 }
 
 sub reload_players {
-    my ($self) = @_;
+    my ( $self, $verbose ) = @_;
 
     @{ $self->players() } = Prisoners::Player->players_by_session(
         $self->id(),
+        $verbose
     );
 
     return;
 }
+
+sub players_ready {
+    my ($self) = @_;
+
+    $self->reload_players();
+
+    if ( scalar @{ $self->players() } < 2 ) {
+        $self->log("Not enough players for the game. Waiting...\n");
+        return;
+    }
+
+    # probably better to use any instead of grep, but here we anyway have two players
+    my $still_thinking = scalar grep { !defined $_->decision() } @{ $self->players() };
+
+    return $still_thinking ? 0 : 1;
+}
+
+sub finish {
+    my ($self) = @_;
+
+    $self->analyze_results();
+
+    # "Who is on duty today? Originator is on duty today"
+    return if ( !$self->originated() );
+
+    return $self->_db_do( 'SetFinished', [ $self->id() ] );
+}
+
+sub analyze_results {
+    my ($self) = @_;
+
+    my @players = @{ $self->players() };
+
+    #TODO add exit statuses
+
+    if ( none { $_->decision() eq 'BETRAY' } @players ) {
+        $self->log("Good job! Trust is essential in human relationship. Sentence: 1 year\n");
+        return;
+    }
+    elsif ( none { $_->decision() eq 'BE_SILENT' } @players ) {
+        $self->log("You have failed this city! Sentence: 2 years\n");
+        return;
+    }
+    # else: now we have one traitor and one good friend
+
+    my ($traitor) = grep { $_->decision() eq 'BETRAY' } @players;
+
+    if (   ( $traitor->originator() && $self->originated() )
+        || ( !$traitor->originator() && !$self->originated() ) ) {
+        $self->log("You are free\n");
+    }
+    else {
+        $self->log("Your lost. Sentence: 3 years\n");
+    }
+
+    return;
+} ## end sub analyze_results
+
+## class methods
+
+sub cleanup {
+    my ($class) = @_;
+
+    #remove old/finished session and consequently related players
+    return $class->_db_do('CleanupSessions');
+}
+
+## queries
 
 # just the place for keeping MySQL queries
 const my %_QUERIES => (
@@ -139,9 +215,20 @@ const my %_QUERIES => (
     LoadSession => q/
         SELECT started_at,
                last_updated,
-               step
+               finished
           FROM Active_Sessions
          WHERE i_session = ?
+           AND finished <> 'Y'
+    /,
+    SetFinished => q/
+        UPDATE Active_Sessions
+           SET finished = 'Y'
+         WHERE i_session = ?
+    /,
+    CleanupSessions => q/
+        DELETE FROM Active_Sessions
+              WHERE started_at < NOW() - INTERVAL 30 MINUTE
+                 OR ( started_at < NOW() - INTERVAL 5 MINUTE AND finished = 'Y' )
     /,
 );
 

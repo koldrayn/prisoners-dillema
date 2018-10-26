@@ -26,9 +26,9 @@ CREATE TABLE `Active_Sessions` (
   `i_session` smallint(3) unsigned NOT NULL AUTO_INCREMENT,
   `started_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `last_updated` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `step` smallint(3) unsigned NOT NULL DEFAULT '0',
+  `finished` enum('Y','N') NOT NULL DEFAULT 'N',
   PRIMARY KEY (`i_session`)
-) ENGINE=InnoDB AUTO_INCREMENT=33 DEFAULT CHARSET=latin1;
+) ENGINE=InnoDB AUTO_INCREMENT=17 DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -52,10 +52,11 @@ CREATE TABLE `Players` (
   `name` varchar(32) DEFAULT NULL,
   `i_session` smallint(3) unsigned DEFAULT NULL,
   `originator` enum('Y','N') NOT NULL DEFAULT 'N',
+  `decision` enum('BETRAY','BE_SILENT') DEFAULT NULL,
   PRIMARY KEY (`i_player`),
   KEY `i_session` (`i_session`),
   CONSTRAINT `Players_ibfk_1` FOREIGN KEY (`i_session`) REFERENCES `Active_Sessions` (`i_session`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=latin1;
+) ENGINE=InnoDB AUTO_INCREMENT=25 DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -80,4 +81,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2018-10-26  4:22:31
+-- Dump completed on 2018-10-26  6:30:24

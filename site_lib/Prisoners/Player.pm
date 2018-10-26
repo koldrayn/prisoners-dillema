@@ -6,6 +6,13 @@ use warnings;
 use Carp qw(croak);
 use Const::Fast;
 
+const my %_DECISION_MAP => (
+    BE_SILENT => 0,
+    BETRAY    => 1,
+);
+
+const my $_MAX_INPUT_ATTEMPTS => 5;
+
 use Mouse;
 extends 'Prisoners::Object';
 
@@ -28,6 +35,12 @@ has 'originator' => (
     is      => 'ro',
     isa     => 'Bool',
     default => 0,
+);
+
+# either betray your omrade or be silent (and hope he will too)
+has 'decision' => (
+    is  => 'rw',
+    isa => 'Maybe[Str]',
 );
 
 around BUILDARGS => sub {
@@ -65,10 +78,29 @@ around BUILDARGS => sub {
     return $class->$orig($args);
 };
 
+sub make_decision {
+    my ($self) = @_;
+
+    my $attempt = 1;
+
+    while ( $attempt++ < $_MAX_INPUT_ATTEMPTS ) {
+        $self->log("Make a decision (type one of BE_SILENT, BETRAY).\n>");
+        my $decision = <>;
+        chomp $decision;
+
+        next if !exists $_DECISION_MAP{ $decision // '' };
+
+        $self->decision($decision);
+        return $self->_db_do( 'MakeDecision', [ $decision, $self->id() ] );
+    }
+
+    croak "Failed to make a decision!";
+}
+
 ## class methods
 
 sub players_by_session {
-    my ( $class, $session_id ) = @_;
+    my ( $class, $session_id, $verbose ) = @_;
 
     if ( !$session_id ) {
         croak "Session id is required!";
@@ -85,15 +117,18 @@ sub players_by_session {
                 i_session  => $p->{i_session},
                 name       => $p->{name},
                 originator => $originator,
+                decision   => $p->{decision},
             }
         );
 
-        $class->log(
-            "Found player '%s'%s\n",
-            $p->{name},
-            $originator ? ' (originator)' : '',
-        );
-    }
+        if ($verbose) {
+            $class->log(
+                "Found player '%s'%s\n",
+                $p->{name},
+                $originator ? ' (originator)' : '',
+            );
+        }
+    } ## end foreach my $p ( @{ $players_data...})
 
     return @players;
 } ## end sub players_by_session
@@ -113,11 +148,17 @@ const my %_QUERIES => (
                      ?,
                      ?)
     /,
+    MakeDecision => q/
+        UPDATE Players
+           SET decision = ?
+         WHERE i_player = ?
+    /,
     GetPlayersBySession => q/
         SELECT i_player,
                name,
                i_session,
-               originator
+               originator,
+               decision
           FROM Players
          WHERE i_session = ?
     /,
